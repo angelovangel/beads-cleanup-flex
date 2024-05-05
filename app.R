@@ -41,14 +41,12 @@ controls <- list(
   numericInput('ncols', 'Number of plate columns', value = 1, min = 1, max = 6, step = 1),
   numericInputIcon('samplevol', 'Sample volume', value = 50, min = 20, max = 100, step = 1, icon = list(NULL, 'ul')),
   numericInputIcon('beadsvol', 'Beads volume', value = 50, min = 20, max = 100, step = 1,icon = list(NULL, 'ul')),
+  numericInputIcon('ebvol', 'EB volume', value = 40, min = 20, max = 100, step = 1,icon = list(NULL, 'ul')),
   numericInputIcon('inctime', 'Incubation time', value = 5, min = 1, max = 15, step = 1, icon = list(NULL, 'min')),
-  selectizeInput('left_pipette', 'Left', choices = c('p20_single_gen2', 'p300_single_gen2')),
-  selectizeInput('right_pipette', 'Right', choices = c('p20_multi_gen2', 'p300_multi_gen2')),
-  numericInputIcon('aspirate_speed', 'Aspirate speed', 
-                   min = 5, max = 100, value = 100, step = 5, 
-                   icon = list(NULL, icon("percent")))
-  
-)
+  selectizeInput('pipette', 'Pipette', 
+                 choices = c('Flex 96-Channel' = 'flex_96channel_1000', 'Flex 8-Channel (5–1000 µL)' = 'flex_8channel_1000')),
+  #selectizeInput('right_pipette', 'Right', choices = c('p20_multi_gen2', 'p300_multi_gen2')),
+  numericInputIcon('aspirate_speed', 'Aspirate speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))))
 
 sidebar <- sidebar(
     controls, 
@@ -61,7 +59,7 @@ panel1 <- list(
     tags$a('Plate preview', bs_icon("info-circle")),
     uiOutput('valueboxes'),
     tags$hr(),
-    tags$a('Plate preview'),
+    #tags$a('Plate preview'),
     reactableOutput('plate')
   )
 )
@@ -74,7 +72,7 @@ ui <- page_navbar(
   theme = bs_theme(font_scale = 0.9, bootswatch = 'yeti', primary = '#2E86C1'),
   sidebar = sidebar,
   #nav_spacer(),
-  nav_panel('Labware and volumes', panel1),
+  nav_panel('Plate preview', panel1),
   nav_panel('Protocol preview', verbatimTextOutput('protocol_preview')),
   nav_panel(
     'Simulate run',
@@ -95,12 +93,24 @@ server <- function(input, output, session) {
   
   
   # CORE functionality
-  myvalues <- reactive({
-    
+  ntipboxes <- reactive({
+    ceiling((2 + input$ncols * 7)/12)
+  })
+  
+  tipbox_positions <- reactive({
+    pos <- c('B3', 'C3', 'D3', 'A2')
+    #validate(need(input$ncols, "Wait"))
+    str_flatten(pos[0:ntipboxes()], collapse = ", ")
   })
   
   myprotocol <- reactive({
-    protocol_template
+    str_replace(protocol_template, "ncols =.*", paste0('ncols = ', input$ncols)) %>%
+      str_replace("Beads cleanup Flex 96-channel, partial loading", paste0("Beads cleanup Flex 96-channel, ", input$ncols, " columns")) %>%
+      str_replace("samplevol =.*", paste0("samplevol = ", input$samplevol)) %>%
+      str_replace("beadsvol =.*", paste0("beadsvol = ", input$beadsvol)) %>%
+      str_replace("ebvol =.*", paste0("ebvol = ", input$ebvol)) %>%
+      str_replace("inctime =.*", paste0("ebvol = ", input$inctime))
+      
   })
   
   # Outputs
@@ -145,23 +155,32 @@ server <- function(input, output, session) {
     
     vbs <- list(
       value_box(
-        height = '70px',
-        title = "Title",
-        value = 20,
+        #height = '100px',
+        title = paste0(input$ncols, " columns, total samples"),
+        value = input$ncols * 12,
         showcase = bsicons::bs_icon('crosshair', size = '70%'), 
         theme_color = 'primary'
       ),
       value_box(
-        height = '70px',
-        title = "Title",
-        value = 10,
+        #height = '75px',
+        title = paste0(ntipboxes(), " tipboxes in positions"),
+        value = tipbox_positions(),
         showcase = bsicons::bs_icon('sliders2', size = '70%'), 
         theme_color = 'primary'
       ),
       value_box(
-        height = '70px',
-        title = 'total volume:',
-        value = 30,
+        #height = '75px',
+        title = 'Total beads volume',
+        value = input$ncols * input$beadsvol * 12,
+        #p('Source: ', input$source_labware),
+        #p('Destination: ', input$dest_labware)
+        showcase = bsicons::bs_icon('water', size = '70%'),
+        theme_color = 'primary'
+      ),
+      value_box(
+        #height = '75px',
+        title = 'Total EB volume',
+        value = input$ncols * input$ebvol * 12,
         #p('Source: ', input$source_labware),
         #p('Destination: ', input$dest_labware)
         showcase = bsicons::bs_icon('water', size = '70%'),
