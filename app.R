@@ -39,14 +39,20 @@ make_plate <- function(cols, rows, content, ncols) {
 # input controls
 controls <- list(
   numericInput('ncols', 'Number of plate columns', value = 1, min = 1, max = 6, step = 1),
-  numericInputIcon('samplevol', 'Sample volume', value = 50, min = 20, max = 100, step = 1, icon = list(NULL, 'ul')),
-  numericInputIcon('beadsvol', 'Beads volume', value = 50, min = 20, max = 100, step = 1,icon = list(NULL, 'ul')),
+  numericInputIcon('samplevol', 'Sample volume', value = 50, min = 10, max = 180, step = 1, icon = list(NULL, 'ul')),
+  numericInputIcon('beadsvol', 'Beads volume', value = 50, min = 10, max = 180, step = 1,icon = list(NULL, 'ul')),
   numericInputIcon('ebvol', 'EB volume', value = 40, min = 20, max = 100, step = 1,icon = list(NULL, 'ul')),
   numericInputIcon('inctime', 'Incubation time', value = 5, min = 1, max = 15, step = 1, icon = list(NULL, 'min')),
-  selectizeInput('pipette', 'Pipette', 
-                 choices = c('Flex 96-Channel' = 'flex_96channel_1000', 'Flex 8-Channel (5–1000 µL)' = 'flex_8channel_1000')),
+  selectizeInput(
+    'pipette', 'Pipette', 
+     choices = c('Flex 96-Channel' = 'flex_96channel_1000', 'Flex 8-Channel (5–1000 µL)' = 'flex_8channel_1000')
+    ),
   #selectizeInput('right_pipette', 'Right', choices = c('p20_multi_gen2', 'p300_multi_gen2')),
-  numericInputIcon('aspirate_speed', 'Aspirate speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))))
+  numericInputIcon('aspirate_speed', 'Aspirate speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))
+                   ),
+  numericInputIcon('dispense_speed', 'Dispense speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))
+                   )
+)
 
 sidebar <- sidebar(
     controls, 
@@ -117,7 +123,11 @@ server <- function(input, output, session) {
   # add appropriate mix according to pipetting_type
   
   output$plate <- renderReactable({
-    DF <- make_plate(cols = 12, rows = 8, content = input$samplevol, ncols = input$ncols)
+    DF <- make_plate(
+      cols = 12, rows = 8, 
+      content = input$samplevol + input$beadsvol,
+      ncols = input$ncols
+      )
     reactable(
       DF,
       highlight = T, wrap = F, bordered = T, compact = T, fullWidth = F, sortable = F, pagination = F,
@@ -125,12 +135,12 @@ server <- function(input, output, session) {
       defaultColDef =
         colDef(
           style = function(value) {
-            if (value > 0) {
-              color <- "#229954"
+            if (value > 180 & value < 30) { # makes no sense but works
+              color <- "#E74C3C"
               fw <- "bold"
             } else {
-              color <- 'grey'
-              fw <- "lighter"
+              color <- '#52BE80'
+              fw <- "bold"
             }
             list(color = color, fontWeight = fw, fontSize = '90%')
             },
@@ -189,7 +199,17 @@ server <- function(input, output, session) {
     )
     layout_column_wrap(width = '250px', !!!vbs)
   })
+  
   # observers
+  # observe({
+  #   if ( > 180) {
+  #     show_alert(
+  #       session = session,
+  #       title = 'Check volume', text = 'Total volume is > 180 ul', type = 'warning', closeOnClickOutside = T
+  #     )
+  #   }
+  # })
+  
   observeEvent(input$simulate, {
     # clear stdout
     shinyjs::html(id = "stdout", "")
