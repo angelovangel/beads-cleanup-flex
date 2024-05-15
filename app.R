@@ -8,6 +8,7 @@ library(tibble)
 library(stringr)
 library(reactable)
 library(htmlwidgets)
+library(sparkline)
 library(dplyr)
 library(rmarkdown)
 library(vroom)
@@ -38,20 +39,23 @@ make_plate <- function(cols, rows, content, ncols) {
 
 # input controls
 controls <- list(
-  numericInput('ncols', 'Number of plate columns', value = 1, min = 1, max = 6, step = 1),
+  numericInput('ncols', 'Number of plate columns', value = 1, min = 1, max = 12, step = 1),
   numericInputIcon('samplevol', 'Sample volume', value = 50, min = 10, max = 180, step = 1, icon = list(NULL, 'ul')),
   numericInputIcon('beadsvol', 'Beads volume', value = 50, min = 10, max = 180, step = 1,icon = list(NULL, 'ul')),
   numericInputIcon('ebvol', 'EB volume', value = 40, min = 20, max = 100, step = 1,icon = list(NULL, 'ul')),
   numericInputIcon('inctime', 'Incubation time', value = 5, min = 1, max = 15, step = 1, icon = list(NULL, 'min')),
   selectizeInput(
     'pipette', 'Pipette', 
-     choices = c('Flex 96-Channel' = 'flex_96channel_1000', 'Flex 8-Channel (5–1000 µL)' = 'flex_8channel_1000')
+     choices = c('Flex 96-Channel' = 'flex_96channel_1000', 'Flex 8-Channel' = 'flex_8channel_1000')
     ),
   #selectizeInput('right_pipette', 'Right', choices = c('p20_multi_gen2', 'p300_multi_gen2')),
   numericInputIcon('aspirate_speed', 'Aspirate speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))
                    ),
-  numericInputIcon('dispense_speed', 'Dispense speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))
-                   )
+  checkboxGroupInput(
+    'checkboxes', 'Optional', 
+    choiceNames = c('Dry run', 'Mixing on magnet'), 
+    choiceValues = c('True', 'True'), 
+    inline = T)
 )
 
 sidebar <- sidebar(
@@ -66,7 +70,11 @@ panel1 <- list(
     uiOutput('valueboxes'),
     tags$hr(),
     #tags$a('Plate preview'),
-    reactableOutput('plate')
+    layout_columns(
+      col_widths = c(7,5),
+      tags$div(tags$a('Plate preview'), tags$hr(), reactableOutput('plate')),
+      reactableOutput('test')
+    )
   )
 )
 
@@ -93,21 +101,12 @@ server <- function(input, output, session) {
   old_path <- Sys.getenv("PATH")
   Sys.setenv(PATH = paste(old_path, Sys.getenv('OPENTRONS_PATH'), sep = ":"))
   
-  protocol_template <- readLines('01-flex-beads-partial.py', warn = F)
+  protocol_template <- readLines('03-flex-beads-fullhead.py', warn = F)
   
   # Reactives
   
   
   # CORE functionality
-  ntipboxes <- reactive({
-    ceiling((2 + input$ncols * 7)/12)
-  })
-  
-  tipbox_positions <- reactive({
-    pos <- c('B3', 'C3', 'D3', 'A2')
-    #validate(need(input$ncols, "Wait"))
-    str_flatten(pos[0:ntipboxes()], collapse = ", ")
-  })
   
   myprotocol <- reactive({
     str_replace(protocol_template, "ncols =.*", paste0('ncols = ', input$ncols)) %>%
@@ -115,13 +114,44 @@ server <- function(input, output, session) {
       str_replace("samplevol =.*", paste0("samplevol = ", input$samplevol)) %>%
       str_replace("beadsvol =.*", paste0("beadsvol = ", input$beadsvol)) %>%
       str_replace("ebvol =.*", paste0("ebvol = ", input$ebvol)) %>%
-      str_replace("inctime =.*", paste0("ebvol = ", input$inctime))
+      str_replace("inctime =.*", paste0("inctime = ", input$inctime)) %>%
+      str_replace("speed_factor_aspirate =.*", paste0("speed_factor_aspirate = ", round(100/input$aspirate_speed, 2)))
       
+  })
+  
+  tiptable <- reactive({
+    times <- if (input$ncols >= 12) {
+      11
+    } else {
+      input$ncols
+    }
+    tipslist <- list(
+      c(rep(10, 4), rep(1, 8)), # always 4 columns needed
+      c(rep(10, times), rep(1, 11 - times), 10),
+      c(rep(10, times), rep(1, 11 - times), 10),
+      c(rep(10, times), rep(1, 11 - times), 10),
+      c(rep(10, times), rep(1, 11 - times), 10)
+    )
+    data_frame(
+      position = c('A2', 'B3', 'C3', 'B2', 'C2'),
+      type = c('partial', rep('full', 4)),
+      tips = tipslist
+      
+    )
   })
   
   # Outputs
   # add appropriate mix according to pipetting_type
-  
+  output$test <- renderReactable({
+    reactable(
+      tiptable(),
+      columns = list(
+        tips = colDef(cell = function(values) {
+          sparkline(values, type = 'bar', chartRangeMin = 1, chartRangeMax = 10)
+        })
+      )
+    )
+  })
   output$plate <- renderReactable({
     DF <- make_plate(
       cols = 12, rows = 8, 
@@ -144,7 +174,7 @@ server <- function(input, output, session) {
             }
             list(color = color, fontWeight = fw, fontSize = '90%')
             },
-            minWidth = 80,
+            minWidth = 50,
             html = TRUE,
             headerStyle = list(background = "#f7f7f8", fontSize = '90%')
           )
@@ -166,22 +196,15 @@ server <- function(input, output, session) {
     vbs <- list(
       value_box(
         #height = '100px',
-        title = paste0(input$ncols, " columns, total samples"),
-        value = input$ncols * 12,
+        title = paste0(input$ncols, " columns"),
+        value = paste0(input$ncols * 8, ' samples'),
         showcase = bsicons::bs_icon('crosshair', size = '70%'), 
         theme_color = 'primary'
       ),
       value_box(
         #height = '75px',
-        title = paste0(ntipboxes(), " tipboxes in positions"),
-        value = tipbox_positions(),
-        showcase = bsicons::bs_icon('sliders2', size = '70%'), 
-        theme_color = 'primary'
-      ),
-      value_box(
-        #height = '75px',
-        title = 'Total beads volume',
-        value = input$ncols * input$beadsvol * 12,
+        title = 'Beads vol (10% overhead)',
+        value = ceiling((input$ncols * input$beadsvol * 12) * 1.1),
         #p('Source: ', input$source_labware),
         #p('Destination: ', input$dest_labware)
         showcase = bsicons::bs_icon('water', size = '70%'),
@@ -189,8 +212,17 @@ server <- function(input, output, session) {
       ),
       value_box(
         #height = '75px',
-        title = 'Total EB volume',
-        value = input$ncols * input$ebvol * 12,
+        title = 'EB vol (10% overhead)',
+        value = ceiling((input$ncols * input$ebvol * 12) * 1.1),
+        #p('Source: ', input$source_labware),
+        #p('Destination: ', input$dest_labware)
+        showcase = bsicons::bs_icon('water', size = '70%'),
+        theme_color = 'primary'
+      ),
+      value_box(
+        #height = '75px',
+        title = 'EtOH vol (10% overhead)',
+        value = ceiling((150 * 2 * 12 * input$ncols) * 1.1),
         #p('Source: ', input$source_labware),
         #p('Destination: ', input$dest_labware)
         showcase = bsicons::bs_icon('water', size = '70%'),
