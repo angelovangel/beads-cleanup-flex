@@ -51,11 +51,13 @@ controls <- list(
   #selectizeInput('right_pipette', 'Right', choices = c('p20_multi_gen2', 'p300_multi_gen2')),
   numericInputIcon('aspirate_speed', 'Aspirate speed', min = 5, max = 100, value = 100, step = 5, icon = list(NULL, icon("percent"))
                    ),
-  checkboxGroupInput(
-    'checkboxes', 'Optional', 
-    choiceNames = c('Dry run', 'Mixing on magnet'), 
-    choiceValues = c('True', 'True'), 
-    inline = T)
+  checkboxInput('dryrun','Dry run', value = F),
+  checkboxInput('beadsmix', 'Mix on magnet', value = F)
+  # checkboxGroupInput(
+  #   'checkboxes', 'Optional', 
+  #   choiceNames = c('Dry run', 'Mixing on magnet'), 
+  #   choiceValues = c('True', 'True'), 
+  #   inline = T)
 )
 
 sidebar <- sidebar(
@@ -115,8 +117,9 @@ server <- function(input, output, session) {
       str_replace("beadsvol =.*", paste0("beadsvol = ", input$beadsvol)) %>%
       str_replace("ebvol =.*", paste0("ebvol = ", input$ebvol)) %>%
       str_replace("inctime =.*", paste0("inctime = ", input$inctime)) %>%
-      str_replace("speed_factor_aspirate =.*", paste0("speed_factor_aspirate = ", round(100/input$aspirate_speed, 2)))
-      
+      str_replace("speed_factor_aspirate =.*", paste0("speed_factor_aspirate = ", round(100/input$aspirate_speed, 2))) %>%
+      str_replace("DRY_RUN =.*", replacement = if_else(input$dryrun, "DRYRUN = True", "DRYRUN = False")) %>%
+      str_replace("BEADSMIX =.*", replacement = if_else(input$beadsmix, "BEADSMIX = True", "BEADSMIX = False"))
   })
   
   tiptable <- reactive({
