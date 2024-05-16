@@ -82,7 +82,7 @@ def run(ctx: protocol_api.ProtocolContext):
         pipette.default_speed *= factor_slow
 
     # aspirate, dispence x times at well top (leave 0.1x dispvol in tip), air gap 
-    def distribute_custom(aspvol, aspmixtimes, source, dispvol, dest = [], disprate = 1, mix = False):
+    def distribute_custom(aspvol, aspmixtimes, source, dispvol, dest = [], disprate = 1, airgap = True, mixbefore = False):
         ndisp = math.floor(aspvol / dispvol)
         aspvol = aspvol + dispvol * 0.3
         if dispvol + dispvol * 0.3 > aspvol:
@@ -91,9 +91,11 @@ def run(ctx: protocol_api.ProtocolContext):
             raise ValueError("Asp vol exceeds max volume")
         if ndisp != len(dest):
             raise ValueError("Check dest list")
-        if mix:
+        if mixbefore:
             pip.mix(aspmixtimes, aspvol*0.8, source)
         pip.aspirate(aspvol, source)
+        if airgap:
+            pip.aspirate(10, source.top()) # air gap
         for i in dest:
             pip.dispense(dispvol, i.top().move(types.Point(0,0,0)), rate = disprate)
             pip.move_to(i.top().move(types.Point(-2,0,0))) # touch tip
@@ -101,7 +103,7 @@ def run(ctx: protocol_api.ProtocolContext):
         pip.aspirate(20, dest[-1].top().move(types.Point(0,0,1)))
     
     def remove(removal_vol, source, dest, type):
-        # type - 'full' or 'partial'
+        # type - 'etoh' or 'eb'
         extra_vol = 20
         if removal_vol < 5 or removal_vol > source.max_volume:
             raise ValueError("A wrong volume is used")
@@ -110,11 +112,12 @@ def run(ctx: protocol_api.ProtocolContext):
 
         ctx.comment("--- Removing supernatant")
         ctx.comment("Extra vol = " + str(extra_vol))
-        if type == 'partial':
-            pip.aspirate(removal_vol * 0.9, source.bottom().move(types.Point(0, 0, 0.7)), rate = 0.1)
+        if type == 'eb':
+            pip.aspirate(removal_vol * 0.9, source.bottom().move(types.Point(0, 0, 1)), rate = 0.1)
             disp_vol = removal_vol
         else:
-            pip.aspirate(removal_vol, source.bottom().move(types.Point(0, 0, 0.7)), rate = 0.1)
+            for i in (5, 2, 0.7): #stepwise removal
+                pip.aspirate(removal_vol/3, source.bottom().move(types.Point(0, 0, i)), rate = 0.1)
             pip.aspirate(extra_vol, source.bottom().move(types.Point(0, 0, 0.5)), rate = 0.05)
             disp_vol = removal_vol + extra_vol
         slow_tip_withdrawal(pip, source)
@@ -132,7 +135,7 @@ def run(ctx: protocol_api.ProtocolContext):
 
     comment(ctx, "Adding beads to columns " + str(rowA_start[:ncols]))
     pip.pick_up_tip()
-    distribute_custom(beadsvol * ncols, 10, reservoir[beadspos], beadsvol, rowA_start[:ncols], disprate= 0.2, mix = True)
+    distribute_custom(beadsvol * ncols, 10, reservoir[beadspos], beadsvol, rowA_start[:ncols], disprate= 0.2, airgap = False, mixbefore = True)
     pip.drop_tip()
     
     # Mixing beads during inc
@@ -163,7 +166,7 @@ def run(ctx: protocol_api.ProtocolContext):
     # use same tips as for mixing before
     comment(ctx, 'Supernatant removal')
     pip.pick_up_tip(rack_full_1['A1'])
-    remove(samplevol + beadsvol, plate1['A1'], trash, type = 'full')
+    remove(samplevol + beadsvol, plate1['A1'], trash, type = 'etoh')
     pip.drop_tip()
 
     # EtOH washes - distribute from reservoir, use rack2 for etoh removal
@@ -194,7 +197,8 @@ def run(ctx: protocol_api.ProtocolContext):
                 etohvol,
                 rowA_start[batchstart:batchend], 
                 disprate=0.2,
-                mix = False
+                airgap = True,
+                mixbefore = False
             )
             
             #distribute_custom(etohvol * 6, 0, reservoir[etohpos[0]], etohvol,rowA_start[0:6], disprate=0.2)
@@ -205,7 +209,7 @@ def run(ctx: protocol_api.ProtocolContext):
 
         pip_config('full')
         pip.pick_up_tip(rack_full_2['A1'])
-        remove(etohvol, plate1['A1'], trash, type = 'full')
+        remove(etohvol, plate1['A1'], trash, type = 'etoh')
         if i < 2:
             pip.return_tip()
         else:
@@ -220,15 +224,18 @@ def run(ctx: protocol_api.ProtocolContext):
     ########################################################################
     
     comment(ctx, "Resuspend beads")
-    
-    pip.distribute(
-        ebvol, 
-        reservoir[ebpos], 
-        [i.top().move(types.Point(0,0,1)) for i in rowA_start[0:ncols]], # dispense from above
-        #mix_after = (15, ebvol * 0.8), 
-        new_tip = 'always', 
-        disposal_volume = ebvol * 0.5
+    pip.pick_up_tip()
+    distribute_custom(
+        ebvol * ncols, 0, reservoir[ebpos], ebvol, rowA_start[0:ncols], airgap = False, mixbefore = False
     )
+    pip.drop_tip()
+    # pip.distribute(
+    #     ebvol, 
+    #     reservoir[ebpos], 
+    #     [i.top().move(types.Point(0,0,1)) for i in rowA_start[0:ncols]], # dispense from above
+    #     new_tip = 'always', 
+    #     disposal_volume = ebvol * 0.5
+    # )
 
     # full head loading ################################################################
     pip_config('full')
@@ -268,7 +275,7 @@ def run(ctx: protocol_api.ProtocolContext):
     
     comment(ctx, 'Final elution')
     pip.pick_up_tip(rack_full_4['A1'])
-    remove(ebvol, plate1['A1'], plate2['A1'], type = 'partial')
+    remove(ebvol, plate1['A1'], plate2['A1'], type = 'eb')
     pip.drop_tip()
     
     comment(ctx, 'END')
