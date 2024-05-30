@@ -111,7 +111,7 @@ server <- function(input, output, session) {
   # CORE functionality
   
   myprotocol <- reactive({
-    str_replace(protocol_template, "ncols =.*", paste0('ncols = ', input$ncols)) %>%
+    str_replace(protocol_template, "ncols=[0-9]", paste0('ncols=', input$ncols)) %>%
       str_replace("Beads cleanup Flex 96-channel, partial loading", paste0("Beads cleanup Flex 96-channel, ", input$ncols, " columns")) %>%
       str_replace("samplevol =.*", paste0("samplevol = ", input$samplevol)) %>%
       str_replace("beadsvol =.*", paste0("beadsvol = ", input$beadsvol)) %>%
