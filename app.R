@@ -112,13 +112,13 @@ server <- function(input, output, session) {
   
   myprotocol <- reactive({
     str_replace(protocol_template, "ncols=[0-9]", paste0('ncols=', input$ncols)) %>%
-      str_replace("Beads cleanup Flex 96-channel, partial loading", paste0("Beads cleanup Flex 96-channel, ", input$ncols, " columns")) %>%
-      str_replace("samplevol =.*", paste0("samplevol = ", input$samplevol)) %>%
-      str_replace("beadsvol =.*", paste0("beadsvol = ", input$beadsvol)) %>%
-      str_replace("ebvol =.*", paste0("ebvol = ", input$ebvol)) %>%
-      str_replace("inctime =.*", paste0("inctime = ", input$inctime)) %>%
+      #str_replace("Beads cleanup Flex 96-channel, partial loading", paste0("Beads cleanup Flex 96-channel, ", input$ncols, " columns")) %>%
+      str_replace("samplevol=.*", paste0("samplevol=", input$samplevol)) %>%
+      str_replace("beadsvol=.*", paste0("beadsvol=", input$beadsvol)) %>%
+      str_replace("ebvol=.*", paste0("ebvol=", input$ebvol)) %>%
+      str_replace("inctime=.*", paste0("inctime= ", input$inctime)) %>%
       str_replace("speed_factor_aspirate =.*", paste0("speed_factor_aspirate = ", round(100/input$aspirate_speed, 2))) %>%
-      str_replace("DRY_RUN =.*", replacement = if_else(input$dryrun, "DRY_RUN = True", "DRY_RUN = False")) %>%
+      str_replace("DRY_RUN=.*", replacement = if_else(input$dryrun, "DRY_RUN=True", "DRY_RUN=False")) %>%
       str_replace("BEADSMIX =.*", replacement = if_else(input$beadsmix, "BEADSMIX = True", "BEADSMIX = False"))
   })
   
@@ -299,9 +299,9 @@ server <- function(input, output, session) {
     content = function(con) {
       # at download time, replace name so that it appears on the Opentrons app
       replacement <- paste0(format(Sys.time(), "%Y%m%d-%H%M%S"), '-beads-cleanup-flex.py')
-      write(myprotocol() %>%
-              str_replace(pattern = "Beads cleanup Flex 96-channel, full head loading", 
-                          replacement = replacement), 
+      write(myprotocol(), #%>%
+              #str_replace(pattern = "Beads cleanup Flex 96-channel, full head loading", 
+              #            replacement = replacement), 
             con)
     }
   )
